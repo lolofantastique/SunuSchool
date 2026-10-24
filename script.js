@@ -309,7 +309,6 @@
       const input = document.getElementById('login-id-input');
       input.placeholder = d.placeholder; input.value = d.value;
     }
-    window.setLoginRole = setLoginRole;   // exposée globalement pour les onclick de index.html
 
 
     function handleLogin(e) {
@@ -842,7 +841,7 @@
 
       document.getElementById('mgt-total-classes').innerText = classesMgtData.length;
       document.getElementById('mgt-total-students').innerText = classesMgtData.reduce((s, c) => s + c.effectif, 0);
-      document.getElementById('trash-count').innerText = classesTrash.length + peopleTrash().length;
+      document.getElementById('trash-count').innerText = classesTrash.length;
 
       // Liste des classes du formulaire d'inscription (toujours à jour)
       document.getElementById('class-options').innerHTML =
@@ -985,41 +984,28 @@
 
     function openTrash() { renderTrash(); openModal('class-trash-modal'); }
 
-    function peopleTrash() {
-      purgeExpiredTrash();
-      const tp = window.sunuTrashPeople || { students: [], teachers: [] };
-      const now = Date.now();
-      return tp.students.concat(tp.teachers).filter(p => p.at && now - p.at < TRASH_DAYS * DAY_MS);
-    }
     function renderTrash() {
       purgeExpiredTrash();
       const body = document.getElementById('trash-body');
-      const people = peopleTrash();
-      if (!classesTrash.length && !people.length) {
-        body.innerHTML = '<div class="p-10 text-center text-slate-400 text-sm"><div class="text-3xl mb-2">🗑️</div>La corbeille est vide.</div>';
+      if (!classesTrash.length) {
+        body.innerHTML = '<div class="p-10 text-center text-slate-400 text-sm"><div class="text-3xl mb-2">✨</div>La corbeille est vide.</div>';
         return;
       }
-      const left = at => Math.max(1, Math.ceil((at + TRASH_DAYS * DAY_MS - Date.now()) / DAY_MS));
-      const btns = (ok, del) => `<div class="flex gap-1.5 shrink-0">
-        <button onclick="${ok}" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-[11px]">↩ Restaurer</button>
-        <button onclick="${del}" class="bg-white border border-slate-300 hover:border-rose-400 text-rose-600 font-bold px-3 py-1.5 rounded-lg text-[11px]">Supprimer</button></div>`;
-      const cls = classesTrash.map(t => `
+      body.innerHTML = classesTrash.map(t => {
+        const daysLeft = Math.max(1, Math.ceil((t.deletedAt + TRASH_DAYS * DAY_MS - Date.now()) / DAY_MS));
+        return `
           <div class="px-5 py-3.5 flex items-center justify-between gap-3 text-xs">
             <div>
-              <p class="font-extrabold text-slate-900 text-sm">🏫 ${esc(t.cls.name)} <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${levelColor(t.cls.level)}">${t.cls.level}</span></p>
-              <p class="text-slate-500">${t.cls.effectif} élèves · supprimée le ${new Date(t.deletedAt).toLocaleDateString('fr-FR')}</p>
-              <p class="text-amber-600 font-semibold">Suppression définitive dans ${left(t.deletedAt)} jour(s)</p>
-            </div>${btns(`restoreClass(${t.cls.id})`, `purgeClass(this, ${t.cls.id})`)}
-          </div>`).join('');
-      const ppl = people.map(p => `
-          <div class="px-5 py-3.5 flex items-center justify-between gap-3 text-xs">
-            <div>
-              <p class="font-extrabold text-slate-900 text-sm">${p.kind === 'student' ? '🎓' : '👨‍🏫'} ${esc(p.name)} <span class="font-mono text-[10px] text-slate-400">${esc(p.matricule)}</span></p>
-              <p class="text-slate-500">${p.kind === 'student' ? 'Élève' : 'Enseignant'}${p.info ? ' · ' + esc(p.info) : ''} · supprimé le ${new Date(p.at).toLocaleDateString('fr-FR')}</p>
-              <p class="text-amber-600 font-semibold">Suppression définitive dans ${left(p.at)} jour(s)</p>
-            </div>${btns(`restorePerson('${esc(p.matricule)}')`, `purgePerson(this, '${esc(p.matricule)}')`)}
-          </div>`).join('');
-      body.innerHTML = cls + ppl;
+              <p class="font-extrabold text-slate-900 text-sm">${esc(t.cls.name)} <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${levelColor(t.cls.level)}">${t.cls.level}</span></p>
+              <p class="text-slate-500">${t.cls.effectif} élèves • supprimée le ${new Date(t.deletedAt).toLocaleDateString('fr-FR')}</p>
+              <p class="text-amber-600 font-semibold">Suppression définitive dans ${daysLeft} jour${daysLeft > 1 ? 's' : ''}</p>
+            </div>
+            <div class="flex gap-1.5 shrink-0">
+              <button onclick="restoreClass(${t.cls.id})" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-[11px]">↩ Restaurer</button>
+              <button onclick="purgeClass(this, ${t.cls.id})" class="bg-white border border-slate-300 hover:border-rose-400 text-rose-600 font-bold px-3 py-1.5 rounded-lg text-[11px]">Supprimer</button>
+            </div>
+          </div>`;
+      }).join('');
     }
 
     function restoreClass(id) {
@@ -1643,7 +1629,7 @@
         <p><b>Motif :</b> Scolarité ${E(r.months || r.month)}</p><p><b>Mode :</b> ${E(r.method)} • Réf. ${E(r.ref)}</p>
         <p><b>Date :</b> ${E(r.date)}</p><p class="text-base font-black text-slate-900"><b>Montant :</b> ${money(r.total ?? r.amount)}</p></div>
       <p class="text-center text-emerald-700 font-bold">✓ Paiement enregistré (simulation)</p>
-      <button onclick="printReceipt(this.parentElement)" class="no-print w-full bg-slate-900 text-white font-bold py-2 rounded-xl">🖨️ Imprimer le reçu</button></div>`;
+      <button onclick="window.print()" class="no-print w-full bg-slate-900 text-white font-bold py-2 rounded-xl">🖨️ Imprimer le reçu</button></div>`;
   }
 
   window.payToggle = function (m) {
@@ -1712,13 +1698,7 @@
   window.payRemind = function (mat) {
     if (currentRole !== 'admin') return;
     const s = allStudentsDB.find(x => x.matricule === mat); if (!s) return;
-    let n = String(s.phone || '').replace(/\D/g, '');
-    if (n.startsWith('00')) n = n.slice(2);
-    if (n.length === 9) n = '221' + n;                       // numéro sénégalais sans indicatif
-    if (n.length < 11) { showToast('⚠️ Numéro WhatsApp invalide pour ' + s.nom + '.'); return; }
-    const sch = (window.SCHOOL && window.SCHOOL.name) || 'l\'école';
-    const txt = `Bonjour ${s.parent || 'cher parent'},\n\n${sch} vous informe que la scolarité de ${s.nom} (matricule ${s.matricule}) présente un solde restant de ${money(dueNow(s).due)}.\n\nNous vous prions de bien vouloir régulariser dès que possible. Merci de votre confiance.`;
-    window.open('https://wa.me/' + n + '?text=' + encodeURIComponent(txt), '_blank', 'noopener');
+    showToast(`💬 Relance WhatsApp (simulation) à ${s.parent} (${s.phone}) : reste dû ${money(dueNow(s).due)} pour ${s.nom}.`);
   };
   function renderPayAdmin(root) {
     const total = PAY.reduce((a, p) => a + p.amount, 0), by = m => PAY.filter(p => p.method === m).reduce((a, p) => a + p.amount, 0);
@@ -2517,11 +2497,11 @@
     if (dir.error && role !== 'admin') throw new Error('annuaire des enseignants indisponible (exécutez supabase-directory.sql) : ' + dir.error.message);
     const hm = t => String(t).slice(0, 5);
     const byId = rows => { const o = {}; rows.forEach(r => { o[r.id] = r; }); return o; };
-    const classById = byId(classes), studById = byId(students.filter(x => !x.deleted_at)), subjById = byId(subjects);
+    const classById = byId(classes), studById = byId(students), subjById = byId(subjects);
 
     const teacherById = {};
     ((dir.data) || []).forEach(t => { teacherById[t.id] = { id: t.id, matricule: '', name: t.full_name, subject: t.subject, phone: '', slots: [] }; });
-    teachersFull.filter(t => !t.deleted_at).forEach(t => { teacherById[t.id] = { id: t.id, matricule: t.matricule, name: t.full_name, subject: t.subject, phone: t.phone || '', slots: [] }; });
+    teachersFull.forEach(t => { teacherById[t.id] = { id: t.id, matricule: t.matricule, name: t.full_name, subject: t.subject, phone: t.phone || '', slots: [] }; });
     slots.forEach(s => {
       const t = teacherById[s.teacher_id], c = classById[s.class_id];
       if (t && c) t.slots.push({ day: s.day, start: hm(s.start_time), end: hm(s.end_time), classe: c.name, room: s.room || c.room || '' });
@@ -2538,17 +2518,11 @@
       else (rk.data || []).forEach(x => { window.sunuRanks[x.semester] = { rank: x.rank, total: x.total }; });
     }
 
-    // Corbeille des personnes (élèves / enseignants supprimés depuis moins de 30 jours)
-    const tms = r => r.deleted_at ? new Date(r.deleted_at).getTime() : 0;
-    window.sunuTrashPeople = {
-      students: students.filter(x => x.deleted_at).map(x => ({ kind: 'student', matricule: x.matricule, name: x.full_name, info: (classById[x.class_id] || {}).name || '', at: tms(x) })),
-      teachers: teachersFull.filter(x => x.deleted_at).map(x => ({ kind: 'teacher', matricule: x.matricule, name: x.full_name, info: x.subject || '', at: tms(x) }))
-    };
     return {
       classes: classes.map(c => ({ id: c.id, name: c.name, level: c.level, room: c.room || '',
         pp: (teacherById[c.head_teacher_id] || {}).name || '', deletedAt: c.deleted_at ? new Date(c.deleted_at).getTime() : 0 })),
       teachers: Object.values(teacherById).sort((a, b) => a.id - b.id),
-      students: students.filter(s => !s.deleted_at).map(s => ({ nom: s.full_name, matricule: s.matricule, sexe: s.sex, classe: (classById[s.class_id] || {}).name || '',
+      students: students.map(s => ({ nom: s.full_name, matricule: s.matricule, sexe: s.sex, classe: (classById[s.class_id] || {}).name || '',
         parent: s.parent_name, phone: s.phone, fee: s.monthly_fee })),
       subjects: subjects.map(s => ({ name: s.name, coeff: s.coeff })),
       grades: grades.map(g => ({ mat: matOf(g.student_id), subject: (subjById[g.subject_id] || {}).name, sem: g.semester,

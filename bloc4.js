@@ -311,34 +311,20 @@
     if (!t) return;
 
     try {
-      await callFn({ action: 'trash', role: 'teacher', matricule: t.matricule });
-      await reload('🗑️ ' + t.name + ' déplacé(e) dans la corbeille (30 jours).');
+      const { error } = await sbc().from('teachers').delete().eq('id', id);
+      if (error) throw error;
+
+      // Nettoyer compte Auth & profil
+      try {
+        await callFn({ action: 'delete', role: 'teacher', matricule: t.matricule });
+      } catch (fnErr) {
+        console.warn('create-account delete warning:', fnErr);
+      }
+
+      await reload('✅ ' + t.name + ' retiré(e) du registre.');
     } catch (err) {
       toast('⚠️ ' + human(err));
     }
-  };
-
-  window.restorePerson = async function (matricule) {
-    if (!guard()) return;
-    try {
-      await callFn({ action: 'restore', matricule });
-      await reload('✅ Compte restauré.');
-      if (typeof renderTrash === 'function') renderTrash();
-    } catch (err) { toast('⚠️ ' + human(err)); }
-  };
-
-  window.purgePerson = async function (btn, matricule) {
-    if (!guard()) return;
-    if (!btn.dataset.armed) {
-      btn.dataset.armed = '1'; btn.textContent = 'Confirmer ?'; btn.classList.add('bg-rose-600', 'text-white');
-      setTimeout(() => { if (!btn.isConnected) return; delete btn.dataset.armed; btn.textContent = 'Supprimer'; btn.classList.remove('bg-rose-600', 'text-white'); }, 3000);
-      return;
-    }
-    try {
-      await callFn({ action: 'delete', matricule });
-      await reload('✅ Supprimé définitivement.');
-      if (typeof renderTrash === 'function') renderTrash();
-    } catch (err) { toast('⚠️ ' + human(err)); }
   };
 
   window.handleAddSlot = async function (e) {
@@ -466,11 +452,11 @@
     if (!guard()) return;
     const s = allStudentsDB[idx];
     if (!s) return;
-    if (!confirm('Déplacer ' + s.nom + ' (' + s.matricule + ') dans la corbeille ? Il pourra être restauré pendant 30 jours ; son compte sera bloqué.')) return;
+    if (!confirm('Supprimer définitivement ' + s.nom + ' (' + s.matricule + ') et son compte ? Impossible si des notes, absences ou paiements sont enregistrés.')) return;
 
     try {
-      await callFn({ action: 'trash', role: 'student', matricule: s.matricule });
-      await reload('🗑️ ' + s.nom + ' déplacé(e) dans la corbeille (30 jours).');
+      await callFn({ action: 'delete', role: 'student', matricule: s.matricule });
+      await reload('✅ ' + s.nom + ' supprimé(e).');
     } catch (err) {
       toast('⚠️ ' + human(err));
     }
@@ -576,34 +562,4 @@
 
   const startBadge = () => { setInterval(fixBadge, 800); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startBadge); else startBadge();
-})();
-
-
-/* ── Impression d'un reçu à sa taille exacte (100 mm de large, hauteur = contenu) ── */
-(function () {
-  window.printReceipt = function (src) {
-    const node = typeof src === 'string' ? document.getElementById(src) : src;
-    if (!node) return;
-    const old = document.getElementById('print-receipt-root'); if (old) old.remove();
-    const host = document.createElement('div');
-    host.id = 'print-receipt-root';
-    host.style.cssText = 'position:fixed;left:-9999px;top:0;width:100mm;display:block;';
-    const clone = node.cloneNode(true);
-    clone.removeAttribute('id');
-    clone.querySelectorAll('.no-print, button').forEach(e => e.remove());
-    clone.style.cssText += ';width:100mm;max-width:100mm;margin:0;box-sizing:border-box;box-shadow:none;';
-    host.appendChild(clone);
-    document.body.appendChild(host);
-    const mm = Math.ceil(host.getBoundingClientRect().height * 25.4 / 96) + 2;
-    const st = document.createElement('style');
-    st.id = 'print-receipt-style';
-    st.textContent = '@page{size:100mm ' + mm + 'mm;margin:0}' +
-      '@media print{body>*:not(#print-receipt-root){display:none!important}' +
-      '#print-receipt-root{position:static!important;left:auto!important;display:block!important}' +
-      'html,body{background:#fff!important;margin:0!important;padding:0!important}}';
-    document.head.appendChild(st);
-    const done = () => { host.remove(); st.remove(); window.removeEventListener('afterprint', done); };
-    window.addEventListener('afterprint', done);
-    window.print();
-  };
 })();
